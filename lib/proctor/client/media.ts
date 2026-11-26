@@ -139,7 +139,8 @@ export function createAnalysisVideo(stream: MediaStream): HTMLVideoElement {
     height: "2px",
     opacity: "0.01",
     pointerEvents: "none",
-    zIndex: "-1",
+    // Above the page, never covered: some browsers stop updating occluded video.
+    zIndex: "2147483647",
   });
   video.srcObject = stream;
   document.body.appendChild(video);

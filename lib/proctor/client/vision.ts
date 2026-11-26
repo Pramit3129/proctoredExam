@@ -7,8 +7,25 @@ import type { Category, FaceLandmarker, FaceLandmarkerResult, NormalizedLandmark
 
 let landmarkerPromise: Promise<FaceLandmarker> | null = null;
 let lastTimestamp = 0;
+let consoleFiltered = false;
+
+/**
+ * MediaPipe's WebAssembly runtime writes informational lines such as
+ * "INFO: Created TensorFlow Lite XNNPACK delegate for CPU." to console.error,
+ * which dev tooling then reports as errors. Drop only those INFO lines.
+ */
+function filterMediaPipeInfoLogs(): void {
+  if (consoleFiltered) return;
+  consoleFiltered = true;
+  const original = console.error.bind(console);
+  console.error = (...args: unknown[]) => {
+    if (typeof args[0] === "string" && /^INFO: (Created TensorFlow Lite|Initialized TensorFlow Lite)/.test(args[0])) return;
+    original(...args);
+  };
+}
 
 export function loadFaceLandmarker(): Promise<FaceLandmarker> {
+  filterMediaPipeInfoLogs();
   if (!landmarkerPromise) {
     landmarkerPromise = (async () => {
       const { FaceLandmarker, FilesetResolver } = await import("@mediapipe/tasks-vision");

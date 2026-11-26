@@ -663,11 +663,21 @@ export async function ingestBatch(session: SessionRow, body: unknown): Promise<B
     }
 
     // 7. Detector liveness: a visible, live camera must produce analysed frames.
+    //    stall_count holds how long (ms) the detector has produced nothing.
     let stallCount = s.stall_count;
-    if (silentFor >= 3_000) {
-      const stalled = batch.hb.cameraLive && batch.hb.visible && batch.hb.framesAnalyzed === 0;
-      stallCount = stalled ? stallCount + 1 : 0;
-      if (stallCount === 3) stored.push(serverEvent("DETECTOR_STALLED", { heartbeat: batch.hb }, now));
+    const stalled = batch.hb.cameraLive && batch.hb.visible && batch.hb.framesAnalyzed === 0;
+    const previousStall = stallCount;
+    stallCount = stalled ? Math.min(stallCount + silentFor, 2_000_000_000) : 0;
+    if (previousStall < 10_000 && stallCount >= 10_000) {
+      stored.push(serverEvent("DETECTOR_STALLED", { stalledForMs: stallCount, heartbeat: { ...batch.hb, pose: undefined } }, now));
+    }
+    if (process.env.PROCTOR_DEBUG_HEARTBEATS === "1") {
+      const p = batch.hb.pose;
+      console.log(
+        `[proctor] hb ${s.id.slice(0, 6)} frames=${batch.hb.framesAnalyzed} faces=${batch.hb.faceCount} fs=${batch.hb.fullscreen} vis=${batch.hb.visible}` +
+          (p ? ` yaw=${p.yaw} pitch=${p.pitch} gaze=${p.gaze} gazeDown=${p.gazeDown}` : " pose=none") +
+          ` events=${batch.events.map((e) => e.type).join(",") || "-"}`,
+      );
     }
 
     await insertEvents(db, s.id, stored);

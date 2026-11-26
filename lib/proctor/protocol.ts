@@ -166,6 +166,8 @@ export interface Heartbeat {
   framesAnalyzed: number;
   cameraLive: boolean;
   micLive: boolean;
+  /** Latest deviation from calibration (diagnostics only; not scored). */
+  pose?: { yaw: number; pitch: number; gaze: number; gazeDown: number } | null;
 }
 
 export interface WireEvent {

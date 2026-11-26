@@ -41,8 +41,13 @@ export class FaceMonitor {
   private framesSinceTake = 0;
   private lastBlinkAt = Date.now();
   private jawHistory: number[] = [];
-  private lastErrorAt = 0;
+  private lastErrorAt = -Infinity;
   private consecutiveErrors = 0;
+  private noFrameSince: number | null = null;
+  private noFrameReported = false;
+
+  /** Latest head/eye deviation from calibration (degrees / blendshape units), for heartbeat diagnostics. */
+  lastPose: { yaw: number; pitch: number; gaze: number; gazeDown: number } | null = null;
 
   // Camera-health state
   private healthCanvas: HTMLCanvasElement | null = null;
@@ -180,7 +185,12 @@ export class FaceMonitor {
 
   private analyse(): void {
     const result = detect(this.landmarker, this.video);
-    if (!result) return;
+    if (!result) {
+      this.handleMissingFrame();
+      return;
+    }
+    this.noFrameSince = null;
+    this.noFrameReported = false;
     const now = performance.now();
     this.framesSinceTake++;
     const count = result.faceLandmarks.length;
@@ -225,9 +235,15 @@ export class FaceMonitor {
       pitchDeg: round(Math.abs(pitchDelta)),
       eyesDown: round(gazeDownDelta, 2),
     });
-    this.lookingUp.update(Math.abs(pitchDelta) > c.headPitchUpDeg && !pitchDown, now, { pitchDeg: round(Math.abs(pitchDelta)) });
+    // Eyes turned down is decisive evidence against "looking up": the head-pitch
+    // sign alone can flip with camera placement, and up/down never co-occur.
+    const eyesLowered = gazeDownDelta > c.gazeDown / 2;
+    this.lookingUp.update(Math.abs(pitchDelta) > c.headPitchUpDeg && !pitchDown && !eyesLowered && !this.lookingDown.isActive, now, {
+      pitchDeg: round(Math.abs(pitchDelta)),
+    });
 
     const gazeDelta = m.gazeHorizontal - b.gazeHorizontal;
+    this.lastPose = { yaw: round(yawDelta), pitch: round(pitchDelta), gaze: round(gazeDelta, 2), gazeDown: round(gazeDownDelta, 2) };
     this.gazeAway.update(Math.abs(gazeDelta) > c.gazeHorizontal && !turned, now, {
       direction: gazeDelta > 0 ? "left" : "right",
       strength: round(Math.abs(gazeDelta), 2),
@@ -246,6 +262,26 @@ export class FaceMonitor {
 
     if (m.blink > 0.45) this.lastBlinkAt = now;
     this.noBlink.update(now - this.lastBlinkAt > c.noBlinkMs, now, { secondsWithoutBlink: Math.round((now - this.lastBlinkAt) / 1000) });
+  }
+
+  /**
+   * The camera video has no current frame (paused by the browser, or the
+   * stream stalled). Try to restart it, and report it if it does not recover,
+   * so a dead detector is never silent.
+   */
+  private handleMissingFrame(): void {
+    const now = performance.now();
+    this.noFrameSince ??= now;
+    if (this.video.paused) void this.video.play().catch(() => undefined);
+    if (!this.noFrameReported && now - this.noFrameSince > 3_000) {
+      this.noFrameReported = true;
+      this.emit("DETECTOR_ERROR", {
+        message: "Camera video is not delivering frames to the detector.",
+        readyState: this.video.readyState,
+        paused: this.video.paused,
+        width: this.video.videoWidth,
+      });
+    }
   }
 
   /**

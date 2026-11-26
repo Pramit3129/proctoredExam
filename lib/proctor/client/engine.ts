@@ -176,6 +176,7 @@ export class ProctorEngine {
       framesAnalyzed: this.face?.takeFrameCount() ?? 0,
       cameraLive: trackLive(this.opts.media.camera),
       micLive: trackLive(this.opts.media.microphone),
+      pose: this.face?.lastPose ?? null,
     };
   }
 
