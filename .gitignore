@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# old local SQLite store from the mock version
+/data
+
+# sample exam papers (third-party content; keep out of the repository)
+/samples
+
+# documented environment template
+!.env.example
