@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test --no-warnings lib/exam-import/parse.test.ts",
+    "test": "node --test --no-warnings lib/exam-import/parse.test.ts lib/proctor/client/detection.test.ts",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
     "db:status": "node --env-file-if-exists=.env.local scripts/migrate.mjs --status",
     "db:seed-dev": "node --env-file-if-exists=.env.local scripts/seed-dev.mjs",

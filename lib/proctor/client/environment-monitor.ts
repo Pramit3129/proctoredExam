@@ -1,4 +1,5 @@
 import type { Emit } from "./face-monitor";
+import { dockedDevtoolsSuspected } from "./heuristics";
 import { hasMultipleDisplays } from "./media";
 import { Sustained } from "./sustained";
 
@@ -101,6 +102,7 @@ export class EnvironmentMonitor {
   private blurTimer: number | null = null;
   private readonly baseDpr = window.devicePixelRatio || 1;
   private lastShortcutLog = 0;
+  private lastContextMenuLog = 0;
 
   state: EnvironmentState = {
     visible: document.visibilityState === "visible",
@@ -183,9 +185,20 @@ export class EnvironmentMonitor {
     });
     on(document, "dragover", (e) => e.preventDefault());
     on(document, "dragstart", (e) => e.preventDefault());
+    // Right-click: the context menu event, plus the raw right button as a
+    // fallback for browsers or targets where contextmenu is not delivered.
     on(document, "contextmenu", (e) => {
       e.preventDefault();
-      this.emit("CONTEXT_MENU_BLOCKED", {});
+      this.logContextMenu("contextmenu", e as MouseEvent);
+    });
+    on(window, "mousedown", (e) => {
+      if ((e as MouseEvent).button === 2) this.logContextMenu("right-button", e as MouseEvent);
+    });
+    on(window, "auxclick", (e) => {
+      if ((e as MouseEvent).button === 2) {
+        e.preventDefault();
+        this.logContextMenu("right-button", e as MouseEvent);
+      }
     });
     on(document, "selectstart", (e) => {
       if (!isEditable(e.target)) e.preventDefault();
@@ -224,6 +237,15 @@ export class EnvironmentMonitor {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && !isEditable(e.target)) e.preventDefault();
   }
 
+  /** One event per right-click gesture (mousedown, auxclick and contextmenu all fire for it). */
+  private logContextMenu(via: string, e: MouseEvent): void {
+    const now = performance.now();
+    if (now - this.lastContextMenuLog < 600) return;
+    this.lastContextMenuLog = now;
+    const target = e.target instanceof Element ? e.target.tagName.toLowerCase() : "page";
+    this.emit("CONTEXT_MENU_BLOCKED", { via, target });
+  }
+
   private logShortcut(e: KeyboardEvent, reason: string): void {
     const now = performance.now();
     if (now - this.lastShortcutLog < 500) return;
@@ -258,16 +280,17 @@ export class EnvironmentMonitor {
       this.resized.update(false, now);
     }
 
-    // In fullscreen the viewport should cover the screen. A large shortfall
+    // In fullscreen the viewport should cover the screen. One side cut short
     // means something is docked inside the window: almost always DevTools.
     if (fullscreen && visible) {
-      const zoom = (window.devicePixelRatio || 1) / this.baseDpr;
-      const widthGap = screen.width - window.innerWidth * zoom;
-      const heightGap = screen.height - window.innerHeight * zoom;
-      this.devtools.update(widthGap > 160 || heightGap > 160, now, {
-        widthGap: Math.round(widthGap),
-        heightGap: Math.round(heightGap),
+      const check = dockedDevtoolsSuspected({
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        screenWidth: screen.width,
+        screenHeight: screen.height,
+        zoom: (window.devicePixelRatio || 1) / this.baseDpr,
       });
+      this.devtools.update(check.suspected, now, { widthGap: check.widthGap, heightGap: check.heightGap });
     } else {
       this.devtools.update(false, now);
     }

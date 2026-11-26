@@ -184,6 +184,8 @@ export class IntegrityMonitor {
     const ownOrigin = location.origin;
     const isOwned = (el: Element) => el.closest("[data-proctor-owned],[data-proctor-root]") !== null;
     const inspect = (el: Element) => {
+      // The app's root container itself (its contents are still inspected).
+      if (el.hasAttribute("data-app-root") && el.parentElement === document.body) return;
       if (isOwned(el)) return;
       const tag = el.tagName;
       if (tag === "SCRIPT") {

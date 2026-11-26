@@ -57,6 +57,7 @@ export class ProctorEngine {
   private readonly cleanup: (() => void)[] = [];
   private readonly activeWarnings = new Map<EventType, string>();
   private stopped = false;
+  private lastViewed: string | null = null;
   private readonly cameraLost: Sustained<Record<string, unknown>>;
   private readonly micLost: Sustained<Record<string, unknown>>;
 
@@ -150,7 +151,8 @@ export class ProctorEngine {
   }
 
   viewQuestion(questionId: string, index: number): void {
-    if (this.stopped) return;
+    if (this.stopped || this.lastViewed === questionId) return;
+    this.lastViewed = questionId;
     this.transport.enqueue("QUESTION_VIEWED", { q: questionId, i: index }, Date.now());
   }
 

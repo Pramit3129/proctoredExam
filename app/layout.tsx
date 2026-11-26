@@ -16,7 +16,12 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className="h-full">
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        {/* The app's own root; the proctor treats anything else added directly to <body> as injected. */}
+        <div data-app-root className="contents">
+          {children}
+        </div>
+      </body>
     </html>
   );
 }

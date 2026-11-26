@@ -74,6 +74,9 @@ export class FaceMonitor {
     private readonly emit: Emit,
     private readonly onFrame: (faceCount: number) => void,
   ) {
+    // Up to ~3 analysed frames may miss the condition before its timer restarts:
+    // pose, gaze and presence estimates flicker around their thresholds.
+    const grace = Math.max(400, config.analysisIntervalMs * 3);
     const track = (type: EventType, minMs: number, clearMs = 800) =>
       new Sustained<Detail>(
         minMs,
@@ -82,6 +85,7 @@ export class FaceMonitor {
           end: (durationMs, detail) => this.emit(type, { ...detail }, { phase: "end", durationMs }),
         },
         clearMs,
+        grace,
       );
     this.noFace = track("NO_FACE", config.noFaceMs);
     this.multipleFaces = track("MULTIPLE_FACES", config.multipleFacesMs, 1_500);
